@@ -1,0 +1,288 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: Arial, Helvetica, sans-serif;
+  background-color: #f4f6f8;
+  color: #1f2937;
+}
+
+button {
+  font-family: inherit;
+}
+
+.dashboard {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 24px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 35px;
+}
+
+header h1 {
+  font-size: 32px;
+  margin-bottom: 8px;
+  color: #111827;
+}
+
+header p {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 35px;
+}
+
+.tabs button {
+  border: none;
+  background-color: #e5e7eb;
+  color: #374151;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.tabs button.active {
+  background-color: #2563eb;
+  color: white;
+}
+
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.card .label {
+  font-size: 14px;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 1px;
+}
+
+.card strong {
+  font-size: 28px;
+  color: #111827;
+}
+
+.test-controls {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.test-controls button {
+  border: none;
+  background-color: #2563eb;
+  color: white;
+  padding: 12px 22px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.test-controls button:hover {
+  background-color: #1d4ed8;
+}
+
+.charts-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.charts-container h2 {
+  margin-bottom: 5px;
+}
+
+.chart-card {
+  background-color: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.chart-card h3 {
+  margin-bottom: 20px;
+  color: #111827;
+}
+
+.chart-wrapper {
+  position: relative;
+  width: 100%;
+  height: 350px;
+}
+
+@media (max-width: 700px) {
+  .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  header h1 {
+    font-size: 25px;
+  }
+
+  .dashboard {
+    padding: 25px 16px;
+  }
+
+  .chart-wrapper {
+    height: 280px;
+  }
+}
+
+.status-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.status-charging {
+  color: #16a34a !important;
+}
+
+.status-preparing {
+  color: #ca8a04 !important;
+}
+
+.status-unplugged {
+  color: #6b7280 !important;
+}
+
+.status-finished {
+  color: #2563eb !important;
+}
+
+.status-fault {
+  color: #dc2626 !important;
+}
+
+.status-default {
+  color: #111827 !important;
+}
+
+.fault-card {
+  grid-column: 1 / -1;
+}
+
+.control-panel {
+  margin-top: 28px;
+  background-color: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.control-panel h2 {
+  margin-bottom: 22px;
+  color: #111827;
+}
+
+.control-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.control-buttons button {
+  border: none;
+  padding: 13px 26px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.connect-button {
+  background-color: #16a34a;
+  color: white;
+}
+
+.connect-button:hover {
+  background-color: #15803d;
+}
+
+.disconnect-button {
+  background-color: #dc2626;
+  color: white;
+}
+
+.disconnect-button:hover {
+  background-color: #b91c1c;
+}
+
+.command-status {
+  margin-top: 18px;
+  color: #6b7280;
+}
+
+.control-buttons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mqtt-status {
+  margin: 18px auto 0;
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.mqtt-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: currentColor;
+}
+
+.mqtt-online {
+  color: #15803d;
+  background-color: #dcfce7;
+}
+
+.mqtt-offline {
+  color: #b91c1c;
+  background-color: #fee2e2;
+}
+
+.everest-waiting {
+  color: #a16207;
+  background-color: #fef3c7;
+}
