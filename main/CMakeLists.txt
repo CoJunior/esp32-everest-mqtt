@@ -1,6 +1,7 @@
 idf_component_register(
-    SRCS "main.c"
+     SRCS "main.c"
     INCLUDE_DIRS "."
+    EMBED_FILES "web/index.html"
     REQUIRES
         esp_http_server
         esp_netif

@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ESP32 | EVerest Charging Monitor</title>
+
+  <style>
+    :root {
+      --fundo: #0b1626;
+      --painel: #14243a;
+      --borda: #28445f;
+      --texto: #eaf4ff;
+      --secundario: #9cb8d4;
+      --destaque: #35e4b0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--fundo);
+      color: var(--texto);
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      width: min(1100px, 94%);
+      margin: 40px auto;
+    }
+
+    .header {
+      padding: 28px;
+      background: var(--painel);
+      border: 1px solid var(--borda);
+      border-radius: 16px;
+    }
+
+    .header h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+    }
+
+    .header p {
+      color: var(--secundario);
+      margin: 0;
+    }
+
+    .destaque {
+      color: var(--destaque);
+    }
+
+    .section-title {
+      margin: 30px 0 18px;
+      font-size: 21px;
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    .status-card {
+      background: var(--painel);
+      border: 1px solid var(--borda);
+      border-radius: 14px;
+      padding: 22px;
+      min-height: 120px;
+    }
+
+    .status-label {
+      display: block;
+      color: var(--secundario);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    .status-value {
+      font-size: 19px;
+      font-weight: bold;
+    }
+
+    .success {
+      color: var(--destaque);
+    }
+
+    .warning {
+      color: #f5c76b;
+    }
+
+    .danger {
+      color: #ff7b86;
+    }
+
+    @media (max-width: 900px) {
+      .status-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .container {
+        margin: 20px auto;
+      }
+    }
+
+
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+      margin-top: 18px;
+    }
+
+    .scenario-panel {
+      background: var(--painel);
+      border: 1px solid var(--borda);
+      border-radius: 16px;
+      padding: 26px;
+    }
+
+    .scenario-panel h3 {
+      margin: 0 0 10px;
+      font-size: 21px;
+    }
+
+    .scenario-panel p {
+      color: var(--secundario);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+
+    .scenario-actions {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .scenario-btn {
+      display: block;
+      padding: 15px;
+      border-radius: 9px;
+      text-align: center;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: bold;
+      transition: background .2s;
+    }
+
+    .scenario-btn-danger {
+      background: #a82e40;
+      color: white;
+    }
+
+    .scenario-btn-danger:hover {
+      background: #c43b50;
+    }
+
+    .scenario-btn-success {
+      background: #116b57;
+      color: white;
+    }
+
+    .scenario-btn-success:hover {
+      background: #16876d;
+    }
+
+    .scenario-note {
+      border-top: 1px solid var(--borda);
+      padding-top: 16px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 720px) {
+      .scenario-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+
+    /* Histórico de testes de falhas */
+
+    .historico-section {
+      margin-top: 32px;
+    }
+
+    .historico-painel {
+      background: var(--painel);
+      border: 1px solid var(--borda);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .historico-descricao {
+      color: var(--secundario);
+      font-size: 14px;
+      line-height: 1.6;
+      margin: 0 0 22px;
+    }
+
+    .historico-tabela-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .historico-tabela {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 14px;
+    }
+
+    .historico-tabela th,
+    .historico-tabela td {
+      padding: 15px 12px;
+      border-bottom: 1px solid var(--borda);
+    }
+
+    .historico-tabela th {
+      color: var(--secundario);
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .historico-tabela td {
+      color: var(--texto);
+    }
+
+    .historico-tabela tbody tr:hover {
+      background: rgba(53, 228, 176, 0.05);
+    }
+
+    .historico-vazio {
+      text-align: center;
+      color: var(--secundario) !important;
+      padding: 28px !important;
+    }
+
+    .historico-tabela .resultado-falha {
+      color: #ff7b86;
+      font-weight: bold;
+    }
+
+    .historico-tabela .resultado-restaurado {
+      color: var(--destaque);
+      font-weight: bold;
+    }
+
+    @media (max-width: 720px) {
+      .historico-painel {
+        padding: 16px;
+      }
+
+      .historico-tabela {
+        font-size: 12px;
+      }
+    }
+
+
+    /* Navegação lateral do ESP32 */
+
+    .esp32-sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 240px;
+      height: 100vh;
+      background: #0b1626;
+      border-right: 1px solid var(--borda);
+      padding: 28px 16px;
+      z-index: 10;
+    }
+
+    .esp32-sidebar h2 {
+      color: var(--destaque);
+      font-size: 21px;
+      margin: 0 0 35px;
+    }
+
+    .esp32-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .esp32-nav button {
+      background: transparent;
+      color: var(--secundario);
+      border: 1px solid transparent;
+      padding: 14px;
+      text-align: left;
+      border-radius: 9px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .esp32-nav button:hover,
+    .esp32-nav button.ativo {
+      background: #123c38;
+      color: var(--destaque);
+      border-color: #21675c;
+    }
+
+    body {
+      padding-left: 240px;
+    }
+
+    .esp32-aba[hidden] {
+      display: none !important;
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding-left: 0;
+      }
+
+      .esp32-sidebar {
+        position: relative;
+        width: 100%;
+        height: auto;
+        padding: 18px;
+      }
+
+      .esp32-sidebar h2 {
+        margin-bottom: 15px;
+      }
+
+      .esp32-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+
+      .esp32-nav button {
+        flex: 1 1 140px;
+      }
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <!-- Menu lateral do ESP32 -->
+  <aside class="esp32-sidebar">
+    <h2>ESP32 Monitor</h2>
+
+    <nav class="esp32-nav" aria-label="Navegação do ESP32">
+      <button type="button" class="ativo" data-aba="visao-geral">
+        Visão Geral
+      </button>
+
+      <button type="button" data-aba="monitoramento">
+        Monitoramento
+      </button>
+
+      <button type="button" data-aba="simulacao">
+        Simulação de Falhas
+      </button>
+
+      <button type="button" data-aba="historico">
+        Histórico de Testes
+      </button>
+    </nav>
+  </aside>
+
+  <main class="container">
+    <header class="header">
+      <h1>ESP32 <span class="destaque">Charging Monitor</span></h1>
+      <p>Monitoramento e simulação de cenários — ESP32 + EVerest + MQTT</p>
+    </header>
+
+    <section class="esp32-aba" data-pagina="visao-geral">
+      <h2 class="section-title">Visão Geral</h2>
+
+      <div class="historico-painel">
+        <h3>ESP32 + EVerest + MQTT</h3>
+
+        <p class="historico-descricao">
+          Sistema de monitoramento e simulação de falhas
+          desenvolvido para acompanhar a comunicação entre
+          ESP32, MQTT e EVerest.
+        </p>
+
+        <p class="historico-descricao">
+          Utilize o menu lateral para consultar os indicadores,
+          executar testes de falhas e visualizar o histórico
+          dos resultados.
+        </p>
+      </div>
+    </section>
+
+    <section class="esp32-aba" data-pagina="monitoramento" hidden>
+      <h2 class="section-title">Monitoramento em tempo real</h2>
+
+      <div class="status-grid">
+        <article class="status-card">
+          <span class="status-label">Wi-Fi</span>
+          <strong class="status-value success" id="wifi">CONECTADO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Servidor HTTP</span>
+          <strong class="status-value success" id="http">ATIVO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">MQTT do ESP32</span>
+          <strong class="status-value warning" id="mqtt">AGUARDANDO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Estado EVerest</span>
+          <strong class="status-value" id="everest">AGUARDANDO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Falha MQTT simulada</span>
+          <strong class="status-value" id="falha-mqtt">AGUARDANDO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Falha do veículo simulada</span>
+          <strong class="status-value" id="falha-veiculo">AGUARDANDO</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Potência EVerest</span>
+          <strong class="status-value" id="potencia">-- W</strong>
+        </article>
+
+        <article class="status-card">
+          <span class="status-label">Falha permanente EVerest</span>
+          <strong class="status-value" id="falha-permanente">AGUARDANDO</strong>
+        </article>
+      </div>
+
+      <!-- Telemetria recebida do EVerest -->
+      <section class="telemetria-everest">
+        <h3 class="section-title">Telemetria EVerest</h3>
+
+        <div class="status-grid">
+
+          <article class="status-card">
+            <span class="status-label">Estado EVerest</span>
+            <strong class="status-value" id="telemetria-estado">AGUARDANDO</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Potência (W)</span>
+            <strong class="status-value" id="telemetria-potencia-w">-- W</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Potência (kW)</span>
+            <strong class="status-value" id="telemetria-potencia-kw">-- kW</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Energia carregada</span>
+            <strong class="status-value" id="telemetria-energia">-- Wh</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Tempo de carga</span>
+            <strong class="status-value" id="telemetria-tempo">-- s</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Falha permanente</span>
+            <strong class="status-value" id="telemetria-falha">AGUARDANDO</strong>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- Control Pilot -->
+      <section class="telemetria-everest">
+        <h3 class="section-title">Control Pilot</h3>
+
+        <div class="status-grid">
+          <article class="status-card">
+            <span class="status-label">Estado IEC</span>
+            <strong class="status-value" id="cp-estado">AGUARDANDO</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">PWM Control Pilot</span>
+            <strong class="status-value" id="cp-pwm">-- %</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Corrente máxima indicada</span>
+            <strong class="status-value" id="cp-corrente-maxima">-- A</strong>
+          </article>
+        </div>
+      </section>
+
+      <!-- PowerMeter -->
+      <section class="telemetria-everest">
+        <h3 class="section-title">PowerMeter</h3>
+
+        <div class="status-grid">
+          <article class="status-card">
+            <span class="status-label">Corrente medida L1</span>
+            <strong class="status-value" id="pm-l1">-- A</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Corrente medida L2</span>
+            <strong class="status-value" id="pm-l2">-- A</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Corrente medida L3</span>
+            <strong class="status-value" id="pm-l3">-- A</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Corrente medida N</span>
+            <strong class="status-value" id="pm-n">-- A</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Maior corrente medida</span>
+            <strong class="status-value" id="pm-maior">-- A</strong>
+          </article>
+
+          <article class="status-card">
+            <span class="status-label">Situação da corrente</span>
+            <strong class="status-value" id="pm-situacao">AGUARDANDO</strong>
+          </article>
+        </div>
+      </section>
+
+    </section>
+
+
+    <section class="esp32-aba" data-pagina="simulacao" hidden>
+      <h2 class="section-title">Simulação de cenários</h2>
+
+      <div class="scenario-grid">
+
+        <article class="scenario-panel">
+          <h3>Cenário MQTT</h3>
+          <p>Controle a simulação de falhas na comunicação MQTT do ESP32.</p>
+
+          <div class="scenario-actions">
+            <a class="scenario-btn scenario-btn-danger"
+               href="/mqtt/falha" data-comando-esp32>
+              SIMULAR FALHA MQTT
+            </a>
+
+            <a class="scenario-btn scenario-btn-success"
+               href="/mqtt/restaurar" data-comando-esp32>
+              RESTAURAR MQTT
+            </a>
+          </div>
+
+          <p class="scenario-note">
+            A falha MQTT interrompe somente a comunicação deste ESP32.
+            O broker Mosquitto e o EVerest permanecem em execução.
+          </p>
+        </article>
+
+        <article class="scenario-panel">
+          <h3>Cenário do Veículo</h3>
+          <p>Simule falhas do veículo utilizando o ESP32.</p>
+
+          <div class="scenario-actions">
+            <a class="scenario-btn scenario-btn-danger"
+               href="/veiculo/falha" data-comando-esp32>
+              SIMULAR FALHA DO VEÍCULO
+            </a>
+
+            <a class="scenario-btn scenario-btn-success"
+               href="/veiculo/restaurar" data-comando-esp32>
+              RESTAURAR VEÍCULO
+            </a>
+          </div>
+
+          <p class="scenario-note">
+            Esta falha é injetada pelo simulador ESP32 e não modifica
+            o campo permanent_fault real recebido do EVerest.
+          </p>
+        </article>
+
+      </div>
+    </section>
+
+    <section class="historico-section esp32-aba" data-pagina="historico" hidden>
+      <h2 class="section-title">Histórico de Testes de Falhas</h2>
+
+      <div class="historico-painel">
+        <p class="historico-descricao">
+          Acompanhe as mudanças de estado identificadas pelo ESP32,
+          com data e horário de cada evento.
+        </p>
+
+        <div class="historico-tabela-container">
+          <table class="historico-tabela">
+            <thead>
+              <tr>
+                <th>Data e horário</th>
+                <th>Cenário</th>
+                <th>Estado anterior</th>
+                <th>Estado atual</th>
+                <th>Resultado</th>
+              </tr>
+            </thead>
+            <tbody id="historico-eventos">
+              <tr>
+                <td colspan="5" class="historico-vazio">
+                  Aguardando eventos de falha...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+
+    // Navegação entre as páginas do ESP32
+    function navegarParaAba(nomeAba) {
+      const pagina = document.querySelector(
+        `.esp32-aba[data-pagina="${nomeAba}"]`
+      );
+
+      if (!pagina) {
+        console.warn('Página não encontrada:', nomeAba);
+        return;
+      }
+
+      document.querySelectorAll('.esp32-aba').forEach(secao => {
+        secao.hidden = secao !== pagina;
+      });
+
+      document.querySelectorAll('.esp32-nav button').forEach(botao => {
+        const ativo = botao.dataset.aba === nomeAba;
+
+        botao.classList.toggle('ativo', ativo);
+        botao.setAttribute('aria-current', ativo ? 'page' : 'false');
+      });
+    }
+
+    // Configurar os botões do menu lateral
+    document.querySelectorAll('.esp32-nav button').forEach(botao => {
+      botao.addEventListener('click', () => {
+        navegarParaAba(botao.dataset.aba);
+      });
+    });
+
+    // Exibir a página inicial
+    navegarParaAba('visao-geral');
+
+    const campos = {
+      mqtt: document.getElementById('mqtt'),
+      everest: document.getElementById('everest'),
+      falhaMqtt: document.getElementById('falha-mqtt'),
+      falhaVeiculo: document.getElementById('falha-veiculo'),
+      potencia: document.getElementById('potencia'),
+      falhaPermanente: document.getElementById('falha-permanente'),
+      http: document.getElementById('http'),
+
+      cpEstado: document.getElementById('cp-estado'),
+      cpPwm: document.getElementById('cp-pwm'),
+      cpCorrenteMaxima: document.getElementById('cp-corrente-maxima'),
+
+      pmL1: document.getElementById('pm-l1'),
+      pmL2: document.getElementById('pm-l2'),
+      pmL3: document.getElementById('pm-l3'),
+      pmN: document.getElementById('pm-n'),
+      pmMaior: document.getElementById('pm-maior'),
+      pmSituacao: document.getElementById('pm-situacao'),
+
+      // Novos indicadores de telemetria EVerest
+      telemetriaEstado: document.getElementById('telemetria-estado'),
+      telemetriaPotenciaW: document.getElementById('telemetria-potencia-w'),
+      telemetriaPotenciaKW: document.getElementById('telemetria-potencia-kw'),
+      telemetriaEnergia: document.getElementById('telemetria-energia'),
+      telemetriaTempo: document.getElementById('telemetria-tempo'),
+      telemetriaFalha: document.getElementById('telemetria-falha')
+    };
+
+    function atualizarIndicador(elemento, texto, classe = '') {
+      elemento.textContent = texto;
+      elemento.classList.remove('success', 'warning', 'danger');
+
+      if (classe) {
+        elemento.classList.add(classe);
+      }
+    }
+
+    // Histórico de eventos confirmados pelo estado do ESP32
+    let ultimoEstadoFalhas = null;
+    const LIMITE_HISTORICO = 50;
+
+    function registrarEvento(cenario, anterior, atual, falhaAtiva) {
+      const tabela = document.getElementById('historico-eventos');
+      if (!tabela) return;
+
+      const vazio = tabela.querySelector('.historico-vazio');
+      if (vazio) {
+        vazio.closest('tr').remove();
+      }
+
+      const linha = document.createElement('tr');
+      const dataHora = new Date().toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+
+      const valores = [
+        dataHora,
+        cenario,
+        anterior,
+        atual
+      ];
+
+      for (const valor of valores) {
+        const celula = document.createElement('td');
+        celula.textContent = valor;
+        linha.appendChild(celula);
+      }
+
+      const resultado = document.createElement('td');
+      resultado.textContent = falhaAtiva
+        ? 'FALHA DETECTADA'
+        : 'RESTAURADO';
+
+      resultado.className = falhaAtiva
+        ? 'resultado-falha'
+        : 'resultado-restaurado';
+
+      linha.appendChild(resultado);
+      tabela.prepend(linha);
+
+      while (tabela.rows.length > LIMITE_HISTORICO) {
+        tabela.deleteRow(-1);
+      }
+
+      salvarHistorico();
+    }
+
+    // Salvar e recuperar o histórico no navegador
+    const CHAVE_HISTORICO = 'esp32_historico_falhas_v1';
+
+    function salvarHistorico() {
+      const tabela = document.getElementById('historico-eventos');
+      if (!tabela) return;
+
+      const eventos = Array.from(tabela.rows)
+        .filter(linha => linha.cells.length === 5)
+        .map(linha => ({
+          valores: Array.from(linha.cells).map(celula => celula.textContent),
+          classeResultado: linha.cells[4].className
+        }));
+
+      try {
+        localStorage.setItem(
+          CHAVE_HISTORICO,
+          JSON.stringify(eventos)
+        );
+      } catch (erro) {
+        console.warn('Não foi possível salvar o histórico:', erro);
+      }
+    }
+
+    function recuperarHistorico() {
+      const tabela = document.getElementById('historico-eventos');
+      if (!tabela) return;
+
+      try {
+        const salvo = localStorage.getItem(CHAVE_HISTORICO);
+        if (!salvo) return;
+
+        const eventos = JSON.parse(salvo);
+        if (!Array.isArray(eventos)) return;
+
+        const eventosValidos = eventos.slice(0, LIMITE_HISTORICO)
+          .filter(evento =>
+            Array.isArray(evento.valores) &&
+            evento.valores.length === 5 &&
+            evento.valores.every(valor => typeof valor === 'string') &&
+            ['resultado-falha', 'resultado-restaurado']
+              .includes(evento.classeResultado)
+          );
+
+        if (eventosValidos.length === 0) return;
+
+        tabela.replaceChildren();
+
+        for (const evento of eventosValidos) {
+          const linha = document.createElement('tr');
+
+          evento.valores.forEach((valor, indice) => {
+            const celula = document.createElement('td');
+            celula.textContent = valor;
+
+            if (indice === 4) {
+              celula.className = evento.classeResultado;
+            }
+
+            linha.appendChild(celula);
+          });
+
+          tabela.appendChild(linha);
+        }
+
+        console.log('Histórico recuperado:', eventosValidos.length, 'eventos');
+      } catch (erro) {
+        console.warn('Não foi possível recuperar o histórico:', erro);
+      }
+    }
+
+    function verificarMudancasFalhas(dados) {
+      const estadoAtual = {
+        mqtt: dados.falha_mqtt_simulada,
+        veiculo: dados.falha_veiculo_simulada
+      };
+
+      if (ultimoEstadoFalhas !== null) {
+        if (ultimoEstadoFalhas.mqtt !== estadoAtual.mqtt) {
+          registrarEvento(
+            'MQTT',
+            ultimoEstadoFalhas.mqtt ? 'Falha ativa' : 'Normal',
+            estadoAtual.mqtt ? 'Falha ativa' : 'Normal',
+            estadoAtual.mqtt
+          );
+        }
+
+        if (ultimoEstadoFalhas.veiculo !== estadoAtual.veiculo) {
+          registrarEvento(
+            'Veículo',
+            ultimoEstadoFalhas.veiculo ? 'Falha ativa' : 'Normal',
+            estadoAtual.veiculo ? 'Falha ativa' : 'Normal',
+            estadoAtual.veiculo
+          );
+        }
+      }
+
+      ultimoEstadoFalhas = estadoAtual;
+    }
+
+    async function atualizarStatus() {
+      try {
+        const resposta = await fetch('/api/status', {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (!resposta.ok) {
+          throw new Error('HTTP ' + resposta.status);
+        }
+
+        const dados = await resposta.json();
+
+        if (
+          typeof dados.mqtt_conectado !== 'boolean' ||
+          typeof dados.falha_mqtt_simulada !== 'boolean' ||
+          typeof dados.falha_veiculo_simulada !== 'boolean' ||
+          typeof dados.estado_everest !== 'string'
+        ) {
+          throw new Error('Resposta inválida do ESP32');
+        }
+
+        verificarMudancasFalhas(dados);
+
+        atualizarIndicador(campos.http, 'ATIVO', 'success');
+
+        atualizarIndicador(
+          campos.mqtt,
+          dados.falha_mqtt_simulada
+            ? 'FALHA SIMULADA'
+            : dados.mqtt_conectado
+              ? 'CONECTADO'
+              : 'RECONECTANDO',
+          dados.falha_mqtt_simulada
+            ? 'danger'
+            : dados.mqtt_conectado
+              ? 'success'
+              : 'warning'
+        );
+
+        atualizarIndicador(campos.everest, dados.estado_everest);
+
+        atualizarIndicador(
+          campos.falhaMqtt,
+          dados.falha_mqtt_simulada ? 'ATIVA' : 'NENHUMA',
+          dados.falha_mqtt_simulada ? 'danger' : 'success'
+        );
+
+        atualizarIndicador(
+          campos.falhaVeiculo,
+          dados.falha_veiculo_simulada ? 'FALHA ATIVA' : 'NORMAL',
+          dados.falha_veiculo_simulada ? 'danger' : 'success'
+        );
+
+        atualizarIndicador(
+          campos.potencia,
+          typeof dados.potencia_w === 'number'
+            ? dados.potencia_w.toFixed(2) + ' W'
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.falhaPermanente,
+          typeof dados.falha_permanente === 'boolean'
+            ? dados.falha_permanente ? 'SIM' : 'NÃO'
+            : 'INDISPONÍVEL',
+          dados.falha_permanente === true ? 'danger' : 'success'
+        );
+
+        // Atualizar painel Telemetria EVerest
+        atualizarIndicador(
+          campos.telemetriaEstado,
+          dados.estado_everest
+        );
+
+        atualizarIndicador(
+          campos.telemetriaPotenciaW,
+          typeof dados.potencia_w === 'number'
+            ? dados.potencia_w.toFixed(2) + ' W'
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.telemetriaPotenciaKW,
+          typeof dados.potencia_kw === 'number'
+            ? dados.potencia_kw.toFixed(3) + ' kW'
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.telemetriaEnergia,
+          typeof dados.energia_carregada_wh === 'number'
+            ? dados.energia_carregada_wh.toFixed(2) + ' Wh'
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.telemetriaTempo,
+          typeof dados.tempo_carregamento_s === 'number'
+            ? String(Math.floor(dados.tempo_carregamento_s / 60)).padStart(2, '0')
+              + ':' +
+              String(Math.floor(dados.tempo_carregamento_s % 60)).padStart(2, '0')
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.telemetriaFalha,
+          typeof dados.falha_permanente === 'boolean'
+            ? dados.falha_permanente ? 'SIM' : 'NÃO'
+            : 'INDISPONÍVEL',
+          dados.falha_permanente === true ? 'danger' : 'success'
+        );
+
+        // Control Pilot
+        atualizarIndicador(
+          campos.cpEstado,
+          typeof dados.estado_iec === 'string'
+            ? dados.estado_iec
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.cpPwm,
+          typeof dados.pwm_control_pilot === 'number'
+            ? dados.pwm_control_pilot.toFixed(1) + ' %'
+            : 'INDISPONÍVEL'
+        );
+
+        atualizarIndicador(
+          campos.cpCorrenteMaxima,
+          typeof dados.corrente_maxima_a === 'number'
+            ? dados.corrente_maxima_a.toFixed(2) + ' A'
+            : 'INDISPONÍVEL'
+        );
+
+        // PowerMeter
+        const correntes = [
+          [campos.pmL1, dados.corrente_l1_a],
+          [campos.pmL2, dados.corrente_l2_a],
+          [campos.pmL3, dados.corrente_l3_a],
+          [campos.pmN, dados.corrente_n_a],
+          [campos.pmMaior, dados.maior_corrente_medida_a]
+        ];
+
+        correntes.forEach(([campo, valor]) => {
+          atualizarIndicador(
+            campo,
+            typeof valor === 'number'
+              ? valor.toFixed(2) + ' A'
+              : 'INDISPONÍVEL'
+          );
+        });
+
+        atualizarIndicador(
+          campos.pmSituacao,
+          typeof dados.corrente_dentro_limite === 'boolean'
+            ? dados.corrente_dentro_limite
+              ? 'DENTRO DO LIMITE'
+              : 'ACIMA DO LIMITE'
+            : 'INDISPONÍVEL',
+          dados.corrente_dentro_limite === true
+            ? 'success'
+            : dados.corrente_dentro_limite === false
+              ? 'danger'
+              : 'warning'
+        );
+
+      } catch (erro) {
+        console.warn('Falha ao consultar ESP32:', erro);
+
+        atualizarIndicador(campos.http, 'SEM RESPOSTA', 'danger');
+
+        for (const campo of [
+          campos.mqtt,
+          campos.everest,
+          campos.falhaMqtt,
+          campos.falhaVeiculo,
+          campos.potencia,
+          campos.falhaPermanente,
+          campos.telemetriaEstado,
+          campos.telemetriaPotenciaW,
+          campos.telemetriaPotenciaKW,
+          campos.telemetriaEnergia,
+          campos.telemetriaTempo,
+          campos.telemetriaFalha,
+          campos.cpEstado,
+          campos.cpPwm,
+          campos.cpCorrenteMaxima,
+          campos.pmL1,
+          campos.pmL2,
+          campos.pmL3,
+          campos.pmN,
+          campos.pmMaior,
+          campos.pmSituacao
+        ]) {
+          atualizarIndicador(campo, 'INDISPONÍVEL', 'warning');
+        }
+      }
+    }
+
+    // Enviar comandos sem sair da página
+    document.querySelectorAll('[data-comando-esp32]').forEach(botao => {
+      botao.addEventListener('click', async (evento) => {
+        evento.preventDefault();
+
+        const rota = botao.getAttribute('href');
+
+        try {
+          const resposta = await fetch(rota, {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(5000)
+          });
+
+          if (!resposta.ok) {
+            throw new Error('HTTP ' + resposta.status);
+          }
+
+          // Consultar o estado informado pelo ESP32
+          await atualizarStatus();
+
+        } catch (erro) {
+          console.error('Erro ao executar comando ESP32:', erro);
+          alert('Não foi possível confirmar o comando. Verifique o ESP32.');
+        }
+      });
+    });
+
+    recuperarHistorico();
+    atualizarStatus();
+    setInterval(atualizarStatus, 3000);
+  </script>
+
+</body>
+</html>

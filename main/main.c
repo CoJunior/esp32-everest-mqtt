@@ -18,8 +18,8 @@
  * CONFIGURAÇÃO WI-FI
  * ============================================================ */
 
-#define WIFI_SSID      "Nome_da_rede"
-#define WIFI_PASSWORD  "Senha_da_rede"
+#define WIFI_SSID      "Bissau-Guiné"
+#define WIFI_PASSWORD  "Bedagra84"
 
 /*
  * IP do computador Ubuntu onde estão:
@@ -57,6 +57,11 @@
 #define MQTT_TOPIC_EVEREST_SESSION_INFO \
     "everest_api/connector_1/var/session_info"
 
+#define MQTT_TOPIC_EVEREST_POWERMETER \
+    "everest_api/connector_1/var/powermeter"
+
+#define MQTT_TOPIC_CONTROL_PILOT \
+    "esp32/ev/control_pilot"
 /* ============================================================
  * CONFIGURAÇÃO GERAL
  * ============================================================ */
@@ -80,6 +85,139 @@ static bool mqtt_simulated_failure = false;
 static bool mqtt_service_started = false;
 static bool vehicle_simulated_failure = false;
 
+typedef enum
+{
+    VEHICLE_FAULT_NONE,
+    VEHICLE_FAULT_GENERIC
+} vehicle_fault_t;
+
+static vehicle_fault_t vehicle_fault =
+    VEHICLE_FAULT_NONE;
+
+
+/* ============================================================
+ * MÁQUINA DE ESTADOS IEC 61851 - VEÍCULO SIMULADO
+ * ============================================================ */
+
+
+typedef enum
+{
+    IEC_STATE_A1,
+    IEC_STATE_B1,
+    IEC_STATE_B2,
+    IEC_STATE_C1,
+    IEC_STATE_C2,
+    IEC_STATE_D1,
+    IEC_STATE_D2,
+    IEC_STATE_E,
+    IEC_STATE_F
+} iec_state_t;
+
+/*
+ * Estado inicial:
+ * A1 = veículo não conectado
+ */
+static iec_state_t iec_state = IEC_STATE_A1;
+
+/*
+ * Control Pilot simulado
+ * Duty cycle PWM informado pelo EVSE.
+ */
+static float iec_pwm_duty = 50.0f;
+
+static const char *iec_state_to_string(iec_state_t state)
+{
+    switch (state)
+    {
+        case IEC_STATE_A1:
+            return "A1";
+
+        case IEC_STATE_B1:
+            return "B1";
+
+        case IEC_STATE_B2:
+            return "B2";
+
+        case IEC_STATE_C1:
+            return "C1";
+
+        case IEC_STATE_C2:
+            return "C2";
+
+        case IEC_STATE_D1:
+            return "D1";
+
+        case IEC_STATE_D2:
+            return "D2";
+
+        case IEC_STATE_E:
+            return "E";
+
+        case IEC_STATE_F:
+            return "F";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+
+static float iec_pwm_to_current(float duty_cycle)
+{
+    /*
+     * IEC 61851 - conversao simplificada do duty cycle
+     * do Control Pilot para corrente maxima indicada.
+     */
+
+    if (duty_cycle < 8.0f)
+    {
+        return 0.0f;
+    }
+
+    if (duty_cycle < 10.0f)
+    {
+        return 6.0f;
+    }
+
+    if (duty_cycle <= 85.0f)
+    {
+        return duty_cycle * 0.6f;
+    }
+
+    if (duty_cycle <= 96.0f)
+    {
+        return (duty_cycle - 64.0f) * 2.5f;
+    }
+
+    if (duty_cycle <= 97.0f)
+    {
+        return 80.0f;
+    }
+
+    return 0.0f;
+}
+
+static void publish_control_pilot(void);
+
+static void iec_set_state(iec_state_t new_state)
+{
+    if (iec_state == new_state)
+    {
+        return;
+    }
+
+    ESP_LOGI(
+        TAG,
+        "IEC 61851: %s -> %s",
+        iec_state_to_string(iec_state),
+        iec_state_to_string(new_state)
+    );
+
+    iec_state = new_state;
+
+    publish_control_pilot();
+}
+
 /* ============================================================
  * ESTADO RECEBIDO DO EVEREST
  * ============================================================ */
@@ -89,6 +227,12 @@ static char ev_state[32] = "Unknown";
 static double charged_energy_wh = 0.0;
 
 static double latest_total_w = 0.0;
+
+/* Correntes medidas pelo powermeter do EVerest */
+static double measured_current_l1 = 0.0;
+static double measured_current_l2 = 0.0;
+static double measured_current_l3 = 0.0;
+static double measured_current_n  = 0.0;
 
 static int charging_duration_s = 0;
 
@@ -119,7 +263,6 @@ static void process_everest_session_info(
  * ============================================================ */
 
 static httpd_handle_t web_server = NULL;
-static char web_html_buffer[6144];
 
 /* ------------------------------------------------------------
  * Redirecionar para a página principal
@@ -151,139 +294,32 @@ static esp_err_t web_redirect_home(
  * Página principal
  * ------------------------------------------------------------ */
 
-static esp_err_t web_root_handler(
-    httpd_req_t *req
-)
+extern const unsigned char web_index_html_start[]
+    asm("_binary_index_html_start");
+
+extern const unsigned char web_index_html_end[]
+    asm("_binary_index_html_end");
+
+static esp_err_t web_root_handler(httpd_req_t *req)
 {
-    const char *mqtt_status;
-    const char *mqtt_class;
-    const char *mqtt_failure_status;
-    const char *vehicle_failure_status;
-    const char *vehicle_failure_class;
-
-    if (mqtt_simulated_failure)
-    {
-        mqtt_status = "FALHA SIMULADA";
-        mqtt_class = "danger";
-        mqtt_failure_status = "Ativa";
-    }
-    else if (mqtt_connected)
-    {
-        mqtt_status = "CONECTADO";
-        mqtt_class = "success";
-        mqtt_failure_status = "Nenhuma";
-    }
-    else
-    {
-        mqtt_status = "RECONECTANDO";
-        mqtt_class = "warning";
-        mqtt_failure_status = "Nenhuma";
-    }
-
-    if (vehicle_simulated_failure)
-    {
-        vehicle_failure_status = "FALHA ATIVA";
-        vehicle_failure_class = "danger";
-    }
-    else
-    {
-        vehicle_failure_status = "NORMAL";
-        vehicle_failure_class = "success";
-    }
-
-    snprintf(
-        web_html_buffer,
-        sizeof(web_html_buffer),
-        "<!DOCTYPE html>"
-        "<html lang=\"pt-BR\">"
-        "<head>"
-        "<meta charset=\"UTF-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
-        "<meta http-equiv=\"refresh\" content=\"3\">"
-        "<title>ESP32 + EVerest</title>"
-        "<style>"
-        "body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;padding:20px;"
-        "display:flex;justify-content:center;align-items:center;min-height:100vh;box-sizing:border-box;}"
-        ".container{background:white;width:100%%;max-width:680px;padding:30px;"
-        "border-radius:12px;box-shadow:0 4px 15px rgba(0,0,0,.15);text-align:center;}"
-        "h1{margin:0 0 8px;}"
-        ".subtitle{margin:0 0 24px;color:#555;}"
-        ".grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0;}"
-        ".card{background:#f7f8fa;padding:16px;border-radius:9px;text-align:left;}"
-        ".label{font-size:13px;color:#666;margin-bottom:7px;}"
-        ".value{font-weight:bold;font-size:17px;word-break:break-word;}"
-        ".success{color:#1b7f3a;}"
-        ".danger{color:#b42318;}"
-        ".warning{color:#a15c00;}"
-        ".actions{margin-top:25px;padding-top:20px;border-top:1px solid #ddd;}"
-        ".btn{display:block;text-decoration:none;padding:14px;margin:12px 0;border-radius:8px;"
-        "font-weight:bold;transition:.2s;}"
-        ".btn-danger{background:#b42318;color:white;}"
-        ".btn-danger:hover{background:#8f1c13;}"
-        ".btn-success{background:#1b7f3a;color:white;}"
-        ".btn-success:hover{background:#13652d;}"
-        ".note{font-size:13px;color:#666;line-height:1.5;margin-top:18px;}"
-        "@media(max-width:560px){.grid{grid-template-columns:1fr;}.container{padding:20px;}}"
-        "</style>"
-        "</head>"
-        "<body>"
-        "<div class=\"container\">"
-        "<h1>ESP32 + EVerest</h1>"
-        "<p class=\"subtitle\">Interface de simulação de cenários</p>"
-        "<div class=\"grid\">"
-        "<div class=\"card\"><div class=\"label\">Wi-Fi</div>"
-        "<div class=\"value success\">CONECTADO</div></div>"
-        "<div class=\"card\"><div class=\"label\">Servidor HTTP</div>"
-        "<div class=\"value success\">ATIVO</div></div>"
-        "<div class=\"card\"><div class=\"label\">MQTT do ESP32</div>"
-        "<div class=\"value %s\">%s</div></div>"
-        "<div class=\"card\"><div class=\"label\">Estado EVerest</div>"
-        "<div class=\"value\">%s</div></div>"
-        "<div class=\"card\"><div class=\"label\">Falha MQTT simulada</div>"
-        "<div class=\"value\">%s</div></div>"
-        "<div class=\"card\"><div class=\"label\">Falha do veículo simulada</div>"
-        "<div class=\"value %s\">%s</div></div>"
-        "<div class=\"card\"><div class=\"label\">Potência EVerest</div>"
-        "<div class=\"value\">%.2f W</div></div>"
-        "<div class=\"card\"><div class=\"label\">Falha permanente EVerest</div>"
-        "<div class=\"value\">%s</div></div>"
-        "</div>"
-        "<div class=\"actions\">"
-        "<h2>Cenário MQTT</h2>"
-        "<a class=\"btn btn-danger\" href=\"/mqtt/falha\">SIMULAR FALHA MQTT</a>"
-        "<a class=\"btn btn-success\" href=\"/mqtt/restaurar\">RESTAURAR MQTT</a>"
-        "</div>"
-        "<p class=\"note\">A falha MQTT interrompe somente a comunicação deste ESP32. "
-        "O broker Mosquitto e o EVerest permanecem em execução.</p>"
-        "<div class=\"actions\">"
-        "<h2>Cenário do Veículo</h2>"
-        "<a class=\"btn btn-danger\" href=\"/veiculo/falha\">SIMULAR FALHA DO VEÍCULO</a>"
-        "<a class=\"btn btn-success\" href=\"/veiculo/restaurar\">RESTAURAR VEÍCULO</a>"
-        "</div>"
-        "<p class=\"note\">Esta é uma falha injetada pelo simulador ESP32 e não altera "
-        "o campo permanent_fault real recebido do EVerest.</p>"
-        "</div>"
-        "</body>"
-        "</html>",
-        mqtt_class,
-        mqtt_status,
-        ev_state,
-        mqtt_failure_status,
-        vehicle_failure_class,
-        vehicle_failure_status,
-        latest_total_w,
-        permanent_fault ? "SIM" : "NAO"
-    );
+    const size_t tamanho_html =
+        web_index_html_end - web_index_html_start;
 
     httpd_resp_set_type(
         req,
         "text/html; charset=utf-8"
     );
 
+    httpd_resp_set_hdr(
+        req,
+        "Cache-Control",
+        "no-store"
+    );
+
     return httpd_resp_send(
         req,
-        web_html_buffer,
-        HTTPD_RESP_USE_STRLEN
+        (const char *)web_index_html_start,
+        tamanho_html
     );
 }
 
@@ -447,10 +483,23 @@ static void publish_vehicle_fault_status(void)
         return;
     }
 
-    const char *message = vehicle_simulated_failure
-        ? "{\"origem\":\"ESP32\",\"tipo\":\"falha_veiculo_simulada\",\"ativa\":true}"
-        : "{\"origem\":\"ESP32\",\"tipo\":\"falha_veiculo_simulada\",\"ativa\":false}";
+    const char *cenario =
+    vehicle_fault == VEHICLE_FAULT_GENERIC
+        ? "generica"
+        : "nenhuma";
 
+    char message[256];
+
+    snprintf(
+        message,
+        sizeof(message),
+        "{\"origem\":\"ESP32\","
+        "\"tipo\":\"falha_veiculo_simulada\","
+        "\"cenario\":\"%s\","
+        "\"ativa\":%s}",
+        cenario,
+        vehicle_simulated_failure ? "true" : "false"
+);
     int message_id = esp_mqtt_client_publish(
         mqtt_client,
         MQTT_TOPIC_ESP32_FAULT,
@@ -464,6 +513,58 @@ static void publish_vehicle_fault_status(void)
         TAG,
         "Estado da falha simulada do veículo publicado: %s | ID=%d",
         vehicle_simulated_failure ? "ATIVA" : "NORMAL",
+        message_id
+    );
+}
+
+/* ------------------------------------------------------------
+ * Publicar dados simulados do Control Pilot
+ * ------------------------------------------------------------ */
+
+static void publish_control_pilot(void)
+{
+    if (mqtt_client == NULL || !mqtt_connected)
+    {
+        ESP_LOGW(
+            TAG,
+            "Não foi possível publicar Control Pilot: MQTT desconectado."
+        );
+
+        return;
+    }
+
+    float corrente_maxima =
+        iec_pwm_to_current(iec_pwm_duty);
+
+    char message[256];
+
+    snprintf(
+        message,
+        sizeof(message),
+        "{"
+        "\"estado\":\"%s\","
+        "\"pwm_duty\":%.1f,"
+        "\"corrente_maxima_a\":%.1f"
+        "}",
+        iec_state_to_string(iec_state),
+        iec_pwm_duty,
+        corrente_maxima
+    );
+
+    int message_id =
+        esp_mqtt_client_publish(
+            mqtt_client,
+            MQTT_TOPIC_CONTROL_PILOT,
+            message,
+            0,
+            1,
+            1
+        );
+
+    ESP_LOGI(
+        TAG,
+        "Control Pilot publicado: %s | ID=%d",
+        message,
         message_id
     );
 }
@@ -490,6 +591,7 @@ static esp_err_t web_vehicle_failure_handler(
     }
 
     vehicle_simulated_failure = true;
+    vehicle_fault = VEHICLE_FAULT_GENERIC;
     publish_vehicle_fault_status();
     publish_esp32_status("falha_veiculo_simulada");
 
@@ -511,6 +613,7 @@ static esp_err_t web_vehicle_restore_handler(
     ESP_LOGI(TAG, "RESTAURACAO DO VEICULO SOLICITADA PELA WEB");
 
     vehicle_simulated_failure = false;
+    vehicle_fault = VEHICLE_FAULT_NONE;
 
     if (mqtt_connected)
     {
@@ -534,6 +637,103 @@ static esp_err_t web_vehicle_restore_handler(
 /* ------------------------------------------------------------
  * Iniciar servidor HTTP
  * ------------------------------------------------------------ */
+
+/* ============================================================
+ * API HTTP - STATUS DO ESP32
+ * ============================================================ */
+
+static esp_err_t web_api_status_handler(httpd_req_t *req)
+{
+    char resposta[1024];
+
+    double corrente_maxima_indicada =
+        iec_pwm_to_current(iec_pwm_duty);
+
+    double maior_corrente_medida = measured_current_l1;
+
+    if (measured_current_l2 > maior_corrente_medida)
+    {
+        maior_corrente_medida = measured_current_l2;
+    }
+
+    if (measured_current_l3 > maior_corrente_medida)
+    {
+        maior_corrente_medida = measured_current_l3;
+    }
+
+    int tamanho = snprintf(
+        resposta,
+        sizeof(resposta),
+        "{"
+        "\"mqtt_conectado\":%s,"
+        "\"falha_mqtt_simulada\":%s,"
+        "\"falha_veiculo_simulada\":%s,"
+        "\"estado_everest\":\"%s\","
+        "\"potencia_w\":%.2f,"
+        "\"falha_permanente\":%s,"
+        "\"potencia_kw\":%.3f,"
+        "\"energia_carregada_wh\":%.2f,"
+        "\"tempo_carregamento_s\":%d,"
+        "\"estado_iec\":\"%s\","
+        "\"pwm_control_pilot\":%.1f,"
+        "\"corrente_maxima_a\":%.2f,"
+        "\"corrente_l1_a\":%.2f,"
+        "\"corrente_l2_a\":%.2f,"
+        "\"corrente_l3_a\":%.2f,"
+        "\"corrente_n_a\":%.2f,"
+        "\"maior_corrente_medida_a\":%.2f,"
+        "\"corrente_dentro_limite\":%s"
+        "}",
+        mqtt_connected ? "true" : "false",
+        mqtt_simulated_failure ? "true" : "false",
+        vehicle_simulated_failure ? "true" : "false",
+        ev_state,
+        latest_total_w,
+        permanent_fault ? "true" : "false",
+        latest_total_w / 1000.0,
+        charged_energy_wh,
+        charging_duration_s,
+        iec_state_to_string(iec_state),
+        iec_pwm_duty,
+        corrente_maxima_indicada,
+        measured_current_l1,
+        measured_current_l2,
+        measured_current_l3,
+        measured_current_n,
+        maior_corrente_medida,
+        maior_corrente_medida <= corrente_maxima_indicada
+            ? "true"
+            : "false"
+    );
+
+    if (tamanho < 0 || tamanho >= sizeof(resposta))
+    {
+        ESP_LOGE(TAG, "Resposta JSON excedeu o buffer");
+
+        return httpd_resp_send_err(
+            req,
+            HTTPD_500_INTERNAL_SERVER_ERROR,
+            "Erro ao gerar status"
+        );
+    }
+
+    httpd_resp_set_type(
+        req,
+        "application/json; charset=utf-8"
+    );
+
+    httpd_resp_set_hdr(
+        req,
+        "Cache-Control",
+        "no-store"
+    );
+
+    return httpd_resp_send(
+        req,
+        resposta,
+        HTTPD_RESP_USE_STRLEN
+    );
+}
 
 static void start_web_server(void)
 {
@@ -612,6 +812,13 @@ static void start_web_server(void)
         .user_ctx = NULL
     };
 
+    httpd_uri_t api_status_uri = {
+        .uri = "/api/status",
+        .method = HTTP_GET,
+        .handler = web_api_status_handler,
+        .user_ctx = NULL
+    };
+
     result =
         httpd_register_uri_handler(
             web_server,
@@ -651,6 +858,15 @@ static void start_web_server(void)
             httpd_register_uri_handler(
                 web_server,
                 &vehicle_restore_uri
+            );
+    }
+
+    if (result == ESP_OK)
+    {
+        result =
+            httpd_register_uri_handler(
+                web_server,
+                &api_status_uri
             );
     }
 
@@ -878,6 +1094,35 @@ static bool json_get_number(
     return true;
 }
 
+
+/* ============================================================
+ * EXTRAIR CORRENTE DO POWERMETER
+ * ============================================================ */
+
+static bool json_get_current_phase(
+    const char *json,
+    const char *phase,
+    double *value
+)
+{
+    const char *current_object =
+        strstr(
+            json,
+            "\"current_A\":"
+        );
+
+    if (current_object == NULL)
+    {
+        return false;
+    }
+
+    return json_get_number(
+        current_object,
+        phase,
+        value
+    );
+}
+
 /* ============================================================
  * EXTRAIR BOOLEAN DO JSON
  * ============================================================ */
@@ -956,6 +1201,38 @@ static void process_everest_session_info(
         ev_state,
         sizeof(ev_state)
     );
+
+    if (
+    strcmp(ev_state, "Preparing") == 0 &&
+    iec_state == IEC_STATE_B1
+)
+{
+    iec_set_state(IEC_STATE_B2);
+}
+
+    if (
+    strcmp(ev_state, "Charging") == 0 &&
+    iec_state == IEC_STATE_B2
+)
+{
+    iec_set_state(IEC_STATE_C2);
+}
+
+     if (
+    strcmp(ev_state, "Finished") == 0 &&
+    iec_state == IEC_STATE_C2
+)
+{
+    iec_set_state(IEC_STATE_B2);
+}
+
+if (
+    strcmp(ev_state, "Unplugged") == 0 &&
+    iec_state == IEC_STATE_B2
+)
+{
+    iec_set_state(IEC_STATE_A1);
+}
 
     json_get_number(
         json,
@@ -1092,6 +1369,136 @@ static void process_everest_session_info(
 }
 
 /* ============================================================
+ * PROCESSAR POWERMETER DO EVEREST
+ * ============================================================ */
+
+static void process_everest_powermeter(
+    const char *json
+)
+{
+    json_get_current_phase(
+        json,
+        "L1",
+        &measured_current_l1
+    );
+
+    json_get_current_phase(
+        json,
+        "L2",
+        &measured_current_l2
+    );
+
+    json_get_current_phase(
+        json,
+        "L3",
+        &measured_current_l3
+    );
+
+    json_get_current_phase(
+        json,
+        "N",
+        &measured_current_n
+    );
+
+    double current_limit =
+        iec_pwm_to_current(
+            iec_pwm_duty
+        );
+
+    double max_measured_current =
+        measured_current_l1;
+
+    if (
+        measured_current_l2 >
+        max_measured_current
+    )
+    {
+        max_measured_current =
+            measured_current_l2;
+    }
+
+    if (
+        measured_current_l3 >
+        max_measured_current
+    )
+    {
+        max_measured_current =
+            measured_current_l3;
+    }
+
+    ESP_LOGI(
+        TAG,
+        ""
+    );
+
+    ESP_LOGI(
+        TAG,
+        "========== CONTROL PILOT / POWERMETER =========="
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Estado IEC               : %s",
+        iec_state_to_string(iec_state)
+    );
+
+    ESP_LOGI(
+        TAG,
+        "PWM Control Pilot        : %.1f %%",
+        iec_pwm_duty
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Corrente maxima indicada : %.2f A",
+        current_limit
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Corrente medida L1       : %.2f A",
+        measured_current_l1
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Corrente medida L2       : %.2f A",
+        measured_current_l2
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Corrente medida L3       : %.2f A",
+        measured_current_l3
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Corrente medida N        : %.2f A",
+        measured_current_n
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Maior corrente medida    : %.2f A",
+        max_measured_current
+    );
+
+    ESP_LOGI(
+        TAG,
+        "Situacao                 : %s",
+        max_measured_current <= current_limit
+            ? "DENTRO DO LIMITE"
+            : "ACIMA DO LIMITE"
+    );
+
+    ESP_LOGI(
+        TAG,
+        "================================================"
+    );
+}
+
+/* ============================================================
  * PUBLICAR STATUS DO ESP32
  * ============================================================ */
 
@@ -1142,6 +1549,9 @@ static void publish_esp32_status(
 
 static void everest_connect_vehicle(void)
 {
+
+    iec_set_state(IEC_STATE_B1);
+
     ESP_LOGI(
         TAG,
         "============================================"
@@ -1498,11 +1908,26 @@ static void mqtt_event_handler(
                 everest_sub_id
             );
 
+            int powermeter_sub_id =
+                   esp_mqtt_client_subscribe(
+                   event->client,
+                    MQTT_TOPIC_EVEREST_POWERMETER,
+                    1
+            );
+
+            ESP_LOGI(
+                TAG,
+                 "Inscrito no powermeter do EVerest. ID=%d",
+                  powermeter_sub_id
+           );
+
             publish_esp32_status(
                 "online"
             );
 
             publish_vehicle_fault_status();
+
+            publish_control_pilot();
 
             break;
         }
@@ -1665,10 +2090,68 @@ static void mqtt_event_handler(
                     event->data_len
                 ] = '\0';
 
-                process_everest_session_info(
+                                process_everest_session_info(
                     json_buffer
                 );
 
+                break;
+            }
+
+            /* --------------------------------------------
+             * POWERMETER DO EVEREST
+             * -------------------------------------------- */
+
+            if (
+                mqtt_topic_equals(
+                    event,
+                    MQTT_TOPIC_EVEREST_POWERMETER
+                )
+            )
+            {
+                if (
+                    event->current_data_offset != 0 ||
+                    event->data_len !=
+                    event->total_data_len
+                )
+                {
+                    ESP_LOGW(
+                        TAG,
+                        "powermeter recebido fragmentado."
+                    );
+
+                    break;
+                }
+
+                if (
+                    event->data_len >=
+                    MQTT_DATA_BUFFER_SIZE
+                )
+                {
+                    ESP_LOGE(
+                        TAG,
+                        "powermeter maior que o buffer."
+                    );
+
+                    break;
+                }
+
+                char powermeter_buffer[
+                    MQTT_DATA_BUFFER_SIZE
+                ];
+
+                memcpy(
+                    powermeter_buffer,
+                    event->data,
+                    event->data_len
+                );
+
+                powermeter_buffer[
+                    event->data_len
+                ] = '\0';
+
+               process_everest_powermeter(
+                   powermeter_buffer
+                );
                 break;
             }
 
@@ -1804,10 +2287,30 @@ void app_main(void)
         "Controle + Telemetria"
     );
 
-    ESP_LOGI(
-        TAG,
-        "============================================"
-    );
+   ESP_LOGI(
+    TAG,
+    "============================================"
+);
+
+   ESP_LOGI(
+    TAG,
+    "Estado IEC 61851 inicial : %s",
+    iec_state_to_string(iec_state)
+);
+
+/* Teste da conversao PWM -> corrente maxima IEC 61851 */
+
+   ESP_LOGI(
+    TAG,
+    "Control Pilot PWM       : %.1f %%",
+    iec_pwm_duty
+);
+
+ESP_LOGI(
+    TAG,
+    "Corrente maxima indicada: %.1f A",
+    iec_pwm_to_current(iec_pwm_duty)
+);
 
     wifi_init();
 }
