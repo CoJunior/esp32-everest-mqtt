@@ -1,0 +1,163 @@
+/* ============================================================
+   EVEREST CHARGING MONITOR
+   TEMA PROFISSIONAL - ESTRUTURA PRINCIPAL
+   ============================================================ */
+
+.ev-app-layout {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100vh;
+  background: #080f1c;
+  color: #eaf2ff;
+}
+
+.ev-app-layout > .ev-sidebar {
+  flex: 0 0 252px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.ev-app-layout > .dashboard {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 32px;
+  background:
+    radial-gradient(
+      circle at 90% 0%,
+      rgba(20, 93, 88, 0.15),
+      transparent 35%
+    ),
+    #0d1727;
+}
+
+@media (max-width: 900px) {
+  .ev-app-layout {
+    flex-direction: column;
+  }
+
+  .ev-app-layout > .ev-sidebar {
+    flex: none;
+    position: relative;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .ev-app-layout > .dashboard {
+    width: 100%;
+    padding: 20px 16px;
+  }
+}
+
+/* ============================================================
+   EVEREST - PADRONIZAÇÃO DAS PÁGINAS
+   ============================================================ */
+
+.ev-app-layout .telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.ev-app-layout .card,
+.ev-app-layout .control-panel,
+.ev-app-layout .chart-card {
+  background: #142338;
+  border: 1px solid #263e58;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  color: #eaf2ff;
+}
+
+.ev-app-layout .card {
+  padding: 24px;
+  min-width: 0;
+}
+
+.ev-app-layout .card .label {
+  color: #91b0d1;
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.ev-app-layout .card strong {
+  color: #f5f9ff;
+  font-size: clamp(19px, 2vw, 27px);
+  overflow-wrap: anywhere;
+}
+
+.ev-app-layout .control-panel {
+  padding: 28px;
+  text-align: left;
+}
+
+.ev-app-layout .control-panel h2,
+.ev-app-layout .charts-container h2,
+.ev-app-layout .chart-card h3 {
+  color: #f5f9ff;
+  text-align: left;
+}
+
+.ev-app-layout .control-panel .card {
+  background: #0e1c30;
+  box-shadow: none;
+}
+
+.ev-app-layout .chart-card {
+  padding: 28px;
+}
+
+.ev-app-layout .historico-eventos {
+  display: grid;
+  gap: 12px;
+}
+
+.ev-app-layout .historico-eventos .card {
+  border-left: 3px solid #28d9ad;
+}
+
+.ev-app-layout .command-status {
+  color: #a9c2dc;
+}
+
+.ev-app-layout .control-buttons {
+  justify-content: flex-start;
+}
+
+.ev-app-layout .connect-button {
+  background: #07965f;
+  color: #ffffff;
+}
+
+.ev-app-layout .disconnect-button {
+  background: #c93549;
+  color: #ffffff;
+}
+
+.ev-app-layout .control-buttons button:disabled {
+  opacity: 0.45;
+}
+
+@media (max-width: 700px) {
+  .ev-app-layout .telemetry-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ev-app-layout .control-panel,
+  .ev-app-layout .chart-card {
+    padding: 20px;
+  }
+}
+
+
+/* Corrigir contraste do título da página Cenários ESP32 */
+.ev-app-layout .esp32-page .esp32-header h1 {
+  color: #f2f8ff;
+  opacity: 1;
+  text-shadow: none;
+}

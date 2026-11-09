@@ -27,3 +27,21 @@ main/main_backup.c
 # Variáveis locais / segredos
 .env
 .env.*
+
+# Backups locais
+*.backup
+*.backup_*
+*.backup-*
+*.bak
+*.bak_*
+*.bak-*
+*.pre-modernizacao
+frontend_backup_*/
+frontend_backup_*.tar.gz
+
+# Compilacoes alternativas do frontend
+frontend/dist-modernizado/
+frontend/dist-modernizado-teste/
+
+# Backup original do HTML
+frontend/index.html.backup_*

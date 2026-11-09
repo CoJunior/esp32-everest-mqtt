@@ -5,7 +5,9 @@ const MQTT_URL = 'ws://localhost:9001'
 const TOPICOS = [
   'everest_api/connector_1/var/session_info',
   'everest_api/connector_1/var/powermeter',
-  'esp32/ev/falha'
+  'esp32/ev/control_pilot',
+  'esp32/ev/falha',
+  'esp32/ev/status'
 ]
 
 const client = mqtt.connect(MQTT_URL, {
